@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chrono — personal reminders</title>
+<title>Chrono - personal reminders</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -132,12 +132,14 @@
       <path d="M12 5.5V12L16 14.5" stroke="var(--signal)" stroke-width="1.8" stroke-linecap="round"/>
       <circle cx="12" cy="12" r="1.4" fill="var(--ink)"/>
     </svg>
+
     <h2>Chrono</h2>
 
     <div id="gateLogin">
-      <p>Sign in to sync your reminders.</p>
+      <p>Sign in with your password to sync your reminders.</p>
       <input type="email" id="email" placeholder="you@email.com" autocomplete="email">
-      <button class="save" id="sendLink">Send magic link</button>
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+      <button class="save" id="loginBtn">Sign in</button>
       <p class="gate-status" id="gateStatus"></p>
     </div>
 
@@ -160,11 +162,13 @@
         </svg>
         <h1>Chrono</h1>
       </div>
+
       <div class="clock">
         <span class="time" id="clockTime">--:--:--</span>
         <span class="date" id="clockDate">—</span>
       </div>
     </div>
+
     <div class="progress"><span class="lab" id="dayLab"></span><span id="dayBar"></span></div>
   </header>
 
@@ -174,7 +178,9 @@
       <button class="tab" role="tab" aria-selected="false" data-view="upcoming">Upcoming<span class="n" id="nUp">0</span></button>
       <button class="tab" role="tab" aria-selected="false" data-view="routines">Routines<span class="n" id="nRout">0</span></button>
     </div>
+
     <span class="spacer"></span>
+
     <button class="add-btn" id="addBtn"><span class="plus">+</span> Add</button>
   </div>
 
@@ -201,10 +207,12 @@
           <option value="weekly">Weekly</option>
         </select>
       </div>
+
       <div class="field" id="daysWrap">
         <label>On</label>
         <div class="days" id="daysPick"></div>
       </div>
+
       <div class="field"><label for="cRTime">Time</label><input type="time" id="cRTime"></div>
     </div>
 
@@ -235,7 +243,7 @@ const SUPABASE_URL = 'https://joemcfjesnivevkaofzi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZW1jZmplc25pdmV2a2FvZnppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMTY2ODksImV4cCI6MjA5Nzc5MjY4OX0.C5P6ZXYHyA9e9skQth9s5KudfzDNL5OXgw9MQLYVtDo';
 
 /*
-  Only this email can request the magic link.
+  Only this email can log in.
 */
 const ALLOWED_EMAILS = [
   'ismael.almeida@bluewin.ch'
@@ -295,15 +303,16 @@ async function enterApp() {
   await loadData();
 }
 
-$('#sendLink').onclick = async () => {
+$('#loginBtn').onclick = async () => {
   const email = normalizeEmail($('#email').value);
+  const password = $('#password').value;
   const status = $('#gateStatus');
 
   status.className = 'gate-status';
   status.textContent = '';
 
-  if (!email) {
-    status.textContent = 'Enter your email.';
+  if (!email || !password) {
+    status.textContent = 'Enter your email and password.';
     status.classList.add('err');
     return;
   }
@@ -314,32 +323,31 @@ $('#sendLink').onclick = async () => {
     return;
   }
 
-  $('#sendLink').disabled = true;
-  status.textContent = 'Sending…';
+  $('#loginBtn').disabled = true;
+  status.textContent = 'Signing in…';
 
-  const redirectTo = `${location.origin}${location.pathname}`;
-
-  const { error } = await sb.auth.signInWithOtp({
+  const { error } = await sb.auth.signInWithPassword({
     email,
-    options: {
-      emailRedirectTo: redirectTo,
-      shouldCreateUser: false
-    }
+    password
   });
 
-  $('#sendLink').disabled = false;
+  $('#loginBtn').disabled = false;
 
   if (error) {
     status.textContent = error.message;
     status.classList.add('err');
   } else {
-    status.textContent = 'Check your inbox for the sign-in link.';
+    status.textContent = 'Signed in.';
     status.classList.add('ok');
   }
 };
 
 $('#email').addEventListener('keydown', e => {
-  if (e.key === 'Enter') $('#sendLink').click();
+  if (e.key === 'Enter') $('#loginBtn').click();
+});
+
+$('#password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#loginBtn').click();
 });
 
 $('#signOut').onclick = async () => {
