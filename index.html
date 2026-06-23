@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <style>
   :root{
     --paper:#ECECE8;--card:#FAFAF7;--ink:#15171B;--ink-soft:#61656D;--ink-faint:#9A9DA3;
@@ -22,7 +23,6 @@
   .wrap{max-width:680px;margin:0 auto}
   .hidden{display:none!important}
 
-  /* instrument header */
   .inst{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:18px 20px 0;overflow:hidden}
   .inst-top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
   .brand{display:flex;align-items:center;gap:10px}
@@ -103,7 +103,6 @@
   .banner{background:var(--signal-bg);color:var(--signal);border:1px solid var(--signal);border-radius:8px;padding:9px 13px;font-family:var(--mono);font-size:12px;margin-bottom:16px;display:none}
   .banner.show{display:block}
 
-  /* auth + setup gate */
   .gate{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50}
   .gate-card{max-width:360px;width:100%;text-align:center}
   .gate-card .mark{width:34px;height:34px;margin:0 auto 14px}
@@ -123,9 +122,9 @@
   #dayBar{transition:width .9s linear}
 </style>
 </head>
+
 <body>
 
-<!-- ===== auth / setup gate ===== -->
 <div class="gate" id="gate">
   <div class="gate-card">
     <svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -134,12 +133,14 @@
       <circle cx="12" cy="12" r="1.4" fill="var(--ink)"/>
     </svg>
     <h2>Chrono</h2>
+
     <div id="gateLogin">
       <p>Sign in to sync your reminders.</p>
       <input type="email" id="email" placeholder="you@email.com" autocomplete="email">
       <button class="save" id="sendLink">Send magic link</button>
       <p class="gate-status" id="gateStatus"></p>
     </div>
+
     <div id="gateSetup" class="hidden">
       <p>Add your Supabase keys to the top of this file, then reload.</p>
       <div class="setup-code">const SUPABASE_URL = '…'<br>const SUPABASE_ANON_KEY = '…'</div>
@@ -148,7 +149,6 @@
   </div>
 </div>
 
-<!-- ===== app ===== -->
 <div class="wrap hidden" id="app">
   <header class="inst">
     <div class="inst-top">
@@ -182,20 +182,32 @@
 
   <div class="composer" id="composer">
     <input class="title-in" id="cTitle" placeholder="What do you want to remember?" autocomplete="off">
+
     <div class="seg" role="group" aria-label="Type">
       <button data-k="once" aria-pressed="true">One-off</button>
       <button data-k="recurring" aria-pressed="false">Recurring</button>
     </div>
+
     <div class="fields" id="fieldsOnce">
       <div class="field"><label for="cDate">Date</label><input type="date" id="cDate"></div>
       <div class="field"><label for="cTime">Time</label><input type="time" id="cTime"></div>
     </div>
+
     <div class="fields" id="fieldsRec" style="display:none">
-      <div class="field"><label for="cFreq">Repeats</label>
-        <select id="cFreq"><option value="daily">Every day</option><option value="weekly">Weekly</option></select></div>
-      <div class="field" id="daysWrap"><label>On</label><div class="days" id="daysPick"></div></div>
+      <div class="field">
+        <label for="cFreq">Repeats</label>
+        <select id="cFreq">
+          <option value="daily">Every day</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+      <div class="field" id="daysWrap">
+        <label>On</label>
+        <div class="days" id="daysPick"></div>
+      </div>
       <div class="field"><label for="cRTime">Time</label><input type="time" id="cRTime"></div>
     </div>
+
     <div class="composer-foot">
       <button class="ghost" id="cCancel">Cancel</button>
       <button class="save" id="cSave" disabled>Add reminder</button>
@@ -203,202 +215,595 @@
   </div>
 
   <div id="list"></div>
-  <div class="foot">Synced to Supabase · <button id="signOut">sign out</button></div>
+
+  <div class="foot">
+    Synced to Supabase · <button id="signOut">sign out</button>
+  </div>
 </div>
 
 <script>
 /* ============================================================
-   CONFIG — paste your personal project values here
-   (Settings → API). The anon key is safe in frontend code
-   because Row Level Security protects every row.
+   CONFIG
    ============================================================ */
-const SUPABASE_URL      = 'https://joemcfjesnivevkaofzi.supabase.co';      // e.g. https://abcd1234.supabase.co
+
+const SUPABASE_URL = 'https://joemcfjesnivevkaofzi.supabase.co';
+
+/*
+  Paste your Supabase anon public key here.
+  Do NOT use the service_role key.
+*/
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZW1jZmplc25pdmV2a2FvZnppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMTY2ODksImV4cCI6MjA5Nzc5MjY4OX0.C5P6ZXYHyA9e9skQth9s5KudfzDNL5OXgw9MQLYVtDo';
 
-/* ---------------- boot guards ---------------- */
-const CONFIGURED = !SUPABASE_URL.startsWith('YOUR-') && !SUPABASE_ANON_KEY.startsWith('YOUR-');
-const $=s=>document.querySelector(s);
-let sb=null, mem=[], view='today', cType='once', recDays=new Set();
+/*
+  Only this email can request the magic link.
+*/
+const ALLOWED_EMAILS = [
+  'ismael.almeida@bluewin.ch'
+].map(email => email.toLowerCase());
 
-if(!CONFIGURED){
+const normalizeEmail = email => email.trim().toLowerCase();
+
+/* ---------------- boot guards ---------------- */
+
+const CONFIGURED =
+  SUPABASE_URL &&
+  SUPABASE_ANON_KEY &&
+  !SUPABASE_URL.includes('YOUR') &&
+  !SUPABASE_ANON_KEY.includes('PASTE_YOUR_ANON_PUBLIC_KEY_HERE');
+
+const $ = s => document.querySelector(s);
+
+let sb = null;
+let mem = [];
+let view = 'today';
+let cType = 'once';
+let recDays = new Set();
+
+if (!CONFIGURED) {
   $('#gateLogin').classList.add('hidden');
   $('#gateSetup').classList.remove('hidden');
-}else{
+} else {
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   initAuth();
 }
 
 /* ---------------- auth ---------------- */
-function initAuth(){
-  sb.auth.getSession().then(({data})=>{ if(data.session) enterApp(); });
-  sb.auth.onAuthStateChange((event,session)=>{
-    if(session) enterApp();
+
+function initAuth() {
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) enterApp();
+  });
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session) enterApp();
     else showGate();
   });
 }
-function showGate(){ $('#gate').classList.remove('hidden'); $('#app').classList.add('hidden'); }
-async function enterApp(){
-  if(!$('#gate').classList.contains('hidden')){ $('#gate').classList.add('hidden'); }
+
+function showGate() {
+  $('#gate').classList.remove('hidden');
+  $('#app').classList.add('hidden');
+}
+
+async function enterApp() {
+  $('#gate').classList.add('hidden');
   $('#app').classList.remove('hidden');
-  buildDayPicker(); tick();
+
+  buildDayPicker();
+  tick();
+
   await loadData();
 }
-$('#sendLink').onclick=async()=>{
-  const email=$('#email').value.trim();
-  const status=$('#gateStatus'); status.className='gate-status';
-  if(!email){ status.textContent='Enter your email.'; status.classList.add('err'); return; }
-  $('#sendLink').disabled=true; status.textContent='Sending…';
-  const {error}=await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.href.split('#')[0] } });
-  $('#sendLink').disabled=false;
-  if(error){ status.textContent=error.message; status.classList.add('err'); }
-  else{ status.textContent='Check your inbox for the sign-in link.'; status.classList.add('ok'); }
+
+$('#sendLink').onclick = async () => {
+  const email = normalizeEmail($('#email').value);
+  const status = $('#gateStatus');
+
+  status.className = 'gate-status';
+  status.textContent = '';
+
+  if (!email) {
+    status.textContent = 'Enter your email.';
+    status.classList.add('err');
+    return;
+  }
+
+  if (!ALLOWED_EMAILS.includes(email)) {
+    status.textContent = 'This email is not allowed.';
+    status.classList.add('err');
+    return;
+  }
+
+  $('#sendLink').disabled = true;
+  status.textContent = 'Sending…';
+
+  const redirectTo = `${location.origin}${location.pathname}`;
+
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: redirectTo,
+      shouldCreateUser: false
+    }
+  });
+
+  $('#sendLink').disabled = false;
+
+  if (error) {
+    status.textContent = error.message;
+    status.classList.add('err');
+  } else {
+    status.textContent = 'Check your inbox for the sign-in link.';
+    status.classList.add('ok');
+  }
 };
-$('#email').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#sendLink').click(); });
-$('#signOut').onclick=async()=>{ await sb.auth.signOut(); mem=[]; };
+
+$('#email').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#sendLink').click();
+});
+
+$('#signOut').onclick = async () => {
+  await sb.auth.signOut();
+  mem = [];
+};
 
 /* ---------------- helpers ---------------- */
-const banner=$('#banner');
-const pad=n=>String(n).padStart(2,'0');
-const todayKey=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const DOW_DISPLAY=[1,2,3,4,5,6,0];
-const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function showErr(msg){ banner.textContent=msg; banner.classList.add('show'); setTimeout(()=>banner.classList.remove('show'),4000); }
-const hhmm=t=>(t||'09:00:00').slice(0,5);
 
-/* ---------------- data layer (Supabase) ---------------- */
-function toMem(r, compBy){
-  return r.type==='once'
-    ? {id:r.id,title:r.title,type:'once',date:r.due_date,time:hhmm(r.at_time),done:r.done}
-    : {id:r.id,title:r.title,type:'recurring',freq:r.freq,days:r.days||[],time:hhmm(r.at_time),completed:compBy?.[r.id]||[]};
+const banner = $('#banner');
+const pad = n => String(n).padStart(2, '0');
+
+const todayKey = (d = new Date()) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DOW_DISPLAY = [1, 2, 3, 4, 5, 6, 0];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function showErr(msg) {
+  banner.textContent = msg;
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), 4000);
 }
-async function loadData(){
-  const [rem,comp]=await Promise.all([
-    sb.from('reminders').select('*').eq('archived',false),
+
+const hhmm = t => (t || '09:00:00').slice(0, 5);
+
+/* ---------------- data layer ---------------- */
+
+function toMem(r, compBy) {
+  return r.type === 'once'
+    ? {
+        id: r.id,
+        title: r.title,
+        type: 'once',
+        date: r.due_date,
+        time: hhmm(r.at_time),
+        done: r.done
+      }
+    : {
+        id: r.id,
+        title: r.title,
+        type: 'recurring',
+        freq: r.freq,
+        days: r.days || [],
+        time: hhmm(r.at_time),
+        completed: compBy?.[r.id] || []
+      };
+}
+
+async function loadData() {
+  const [rem, comp] = await Promise.all([
+    sb.from('reminders').select('*').eq('archived', false),
     sb.from('completions').select('reminder_id,completed_on')
   ]);
-  if(rem.error||comp.error){ showErr((rem.error||comp.error).message); return; }
-  const compBy={};
-  (comp.data||[]).forEach(c=>{ (compBy[c.reminder_id]=compBy[c.reminder_id]||[]).push(c.completed_on); });
-  mem=(rem.data||[]).map(r=>toMem(r,compBy));
+
+  if (rem.error || comp.error) {
+    showErr((rem.error || comp.error).message);
+    return;
+  }
+
+  const compBy = {};
+
+  (comp.data || []).forEach(c => {
+    (compBy[c.reminder_id] = compBy[c.reminder_id] || []).push(c.completed_on);
+  });
+
+  mem = (rem.data || []).map(r => toMem(r, compBy));
+
   render();
 }
-async function saveReminder(){
-  const title=$('#cTitle').value.trim(); if(!title) return;
-  const payload = cType==='once'
-    ? {title,type:'once',due_date:$('#cDate').value,at_time:$('#cTime').value||'09:00',done:false}
-    : {title,type:'recurring',freq:$('#cFreq').value,days:$('#cFreq').value==='weekly'?[...recDays]:[0,1,2,3,4,5,6],at_time:$('#cRTime').value||'09:00'};
-  const {data,error}=await sb.from('reminders').insert(payload).select().single();
-  if(error){ showErr(error.message); return; }
-  mem.push(toMem(data,{})); closeComposer(); render();
+
+async function saveReminder() {
+  const title = $('#cTitle').value.trim();
+
+  if (!title) return;
+
+  const payload = cType === 'once'
+    ? {
+        title,
+        type: 'once',
+        due_date: $('#cDate').value,
+        at_time: $('#cTime').value || '09:00',
+        done: false
+      }
+    : {
+        title,
+        type: 'recurring',
+        freq: $('#cFreq').value,
+        days: $('#cFreq').value === 'weekly' ? [...recDays] : [0, 1, 2, 3, 4, 5, 6],
+        at_time: $('#cRTime').value || '09:00'
+      };
+
+  const { data, error } = await sb
+    .from('reminders')
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) {
+    showErr(error.message);
+    return;
+  }
+
+  mem.push(toMem(data, {}));
+  closeComposer();
+  render();
 }
-async function toggle(r){
-  if(r.type==='once'){
-    const nv=!r.done; r.done=nv; render();
-    const {error}=await sb.from('reminders').update({done:nv}).eq('id',r.id);
-    if(error){ r.done=!nv; render(); showErr(error.message); }
-  }else{
-    const k=todayKey(), i=r.completed.indexOf(k);
-    if(i>=0){ r.completed.splice(i,1); render();
-      const {error}=await sb.from('completions').delete().eq('reminder_id',r.id).eq('completed_on',k);
-      if(error){ r.completed.push(k); render(); showErr(error.message); }
-    }else{ r.completed.push(k); render();
-      const {error}=await sb.from('completions').insert({reminder_id:r.id,completed_on:k});
-      if(error){ r.completed.splice(r.completed.indexOf(k),1); render(); showErr(error.message); }
+
+async function toggle(r) {
+  if (r.type === 'once') {
+    const nv = !r.done;
+    r.done = nv;
+    render();
+
+    const { error } = await sb
+      .from('reminders')
+      .update({ done: nv })
+      .eq('id', r.id);
+
+    if (error) {
+      r.done = !nv;
+      render();
+      showErr(error.message);
+    }
+  } else {
+    const k = todayKey();
+    const i = r.completed.indexOf(k);
+
+    if (i >= 0) {
+      r.completed.splice(i, 1);
+      render();
+
+      const { error } = await sb
+        .from('completions')
+        .delete()
+        .eq('reminder_id', r.id)
+        .eq('completed_on', k);
+
+      if (error) {
+        r.completed.push(k);
+        render();
+        showErr(error.message);
+      }
+    } else {
+      r.completed.push(k);
+      render();
+
+      const { error } = await sb
+        .from('completions')
+        .insert({ reminder_id: r.id, completed_on: k });
+
+      if (error) {
+        r.completed.splice(r.completed.indexOf(k), 1);
+        render();
+        showErr(error.message);
+      }
     }
   }
 }
-async function remove(id){
-  const r=mem.find(x=>x.id===id); if(!r) return;
-  mem=mem.filter(x=>x.id!==id); render();
-  const op = r.type==='recurring'
-    ? sb.from('reminders').update({archived:true}).eq('id',id)   // keep history
-    : sb.from('reminders').delete().eq('id',id);
-  const {error}=await op;
-  if(error){ mem.push(r); render(); showErr(error.message); }
+
+async function remove(id) {
+  const r = mem.find(x => x.id === id);
+
+  if (!r) return;
+
+  mem = mem.filter(x => x.id !== id);
+  render();
+
+  const op = r.type === 'recurring'
+    ? sb.from('reminders').update({ archived: true }).eq('id', id)
+    : sb.from('reminders').delete().eq('id', id);
+
+  const { error } = await op;
+
+  if (error) {
+    mem.push(r);
+    render();
+    showErr(error.message);
+  }
 }
 
 /* ---------------- clock ---------------- */
-function tick(){
-  const n=new Date();
-  $('#clockTime').textContent=`${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
-  $('#clockDate').textContent=`${DOW[n.getDay()].toUpperCase()} ${n.getDate()} ${MON[n.getMonth()].toUpperCase()}`;
-  const frac=(n-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000;
-  $('#dayBar').style.width=(frac*100).toFixed(2)+'%';
-  $('#dayLab').textContent=Math.round(frac*100)+'% of day';
+
+function tick() {
+  const n = new Date();
+
+  $('#clockTime').textContent =
+    `${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
+
+  $('#clockDate').textContent =
+    `${DOW[n.getDay()].toUpperCase()} ${n.getDate()} ${MON[n.getMonth()].toUpperCase()}`;
+
+  const frac =
+    (n - new Date(n.getFullYear(), n.getMonth(), n.getDate())) / 86400000;
+
+  $('#dayBar').style.width = (frac * 100).toFixed(2) + '%';
+  $('#dayLab').textContent = Math.round(frac * 100) + '% of day';
 }
-setInterval(tick,1000);
+
+setInterval(tick, 1000);
 
 /* ---------------- composer ---------------- */
-function buildDayPicker(){
-  const w=$('#daysPick'); w.innerHTML='';
-  DOW_DISPLAY.forEach(d=>{
-    const b=document.createElement('button');
-    b.textContent=DOW[d][0]; b.setAttribute('aria-pressed','false'); b.title=DOW[d];
-    b.onclick=()=>{ b.getAttribute('aria-pressed')==='true' ? (recDays.delete(d),b.setAttribute('aria-pressed','false')) : (recDays.add(d),b.setAttribute('aria-pressed','true')); validate(); };
+
+function buildDayPicker() {
+  const w = $('#daysPick');
+  w.innerHTML = '';
+
+  DOW_DISPLAY.forEach(d => {
+    const b = document.createElement('button');
+
+    b.textContent = DOW[d][0];
+    b.setAttribute('aria-pressed', 'false');
+    b.title = DOW[d];
+
+    b.onclick = () => {
+      if (b.getAttribute('aria-pressed') === 'true') {
+        recDays.delete(d);
+        b.setAttribute('aria-pressed', 'false');
+      } else {
+        recDays.add(d);
+        b.setAttribute('aria-pressed', 'true');
+      }
+
+      validate();
+    };
+
     w.appendChild(b);
   });
 }
-function openComposer(){ $('#composer').classList.add('open'); $('#cDate').value=todayKey(); $('#cTime').value='09:00'; $('#cRTime').value='09:00'; $('#cTitle').focus(); }
-function closeComposer(){ $('#composer').classList.remove('open'); $('#cTitle').value=''; recDays.clear(); buildDayPicker(); setType('once'); validate(); }
-function setType(t){ cType=t; document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.k===t)); $('#fieldsOnce').style.display=t==='once'?'flex':'none'; $('#fieldsRec').style.display=t==='recurring'?'flex':'none'; validate(); }
-function freqChanged(){ $('#daysWrap').style.display=$('#cFreq').value==='weekly'?'flex':'none'; validate(); }
-function validate(){ const ok=$('#cTitle').value.trim().length>0 && !(cType==='recurring'&&$('#cFreq').value==='weekly'&&recDays.size===0); $('#cSave').disabled=!ok; }
+
+function openComposer() {
+  $('#composer').classList.add('open');
+  $('#cDate').value = todayKey();
+  $('#cTime').value = '09:00';
+  $('#cRTime').value = '09:00';
+  $('#cTitle').focus();
+}
+
+function closeComposer() {
+  $('#composer').classList.remove('open');
+  $('#cTitle').value = '';
+  recDays.clear();
+  buildDayPicker();
+  setType('once');
+  validate();
+}
+
+function setType(t) {
+  cType = t;
+
+  document.querySelectorAll('.seg button').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.k === t)
+  );
+
+  $('#fieldsOnce').style.display = t === 'once' ? 'flex' : 'none';
+  $('#fieldsRec').style.display = t === 'recurring' ? 'flex' : 'none';
+
+  validate();
+}
+
+function freqChanged() {
+  $('#daysWrap').style.display = $('#cFreq').value === 'weekly' ? 'flex' : 'none';
+  validate();
+}
+
+function validate() {
+  const ok =
+    $('#cTitle').value.trim().length > 0 &&
+    !(cType === 'recurring' && $('#cFreq').value === 'weekly' && recDays.size === 0);
+
+  $('#cSave').disabled = !ok;
+}
 
 /* ---------------- occurrence + render ---------------- */
-function occursToday(r){ return r.type==='once' ? r.date===todayKey() : (r.freq==='daily'||r.days.includes(new Date().getDay())); }
-function isDone(r){ return r.type==='once' ? r.done : r.completed.includes(todayKey()); }
-function recurLabel(r){ if(r.freq==='daily') return 'Every day'; const names=DOW_DISPLAY.filter(d=>r.days.includes(d)).map(d=>DOW[d]); return names.length===7?'Every day':names.join(' · '); }
-function dateLabel(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); return `${DOW[dt.getDay()]} ${d} ${MON[m-1]}`; }
-function isOverdue(r){ if(r.type!=='once'||r.done) return false; return new Date(`${r.date}T${r.time}`)<new Date(); }
-const byTime=(a,b)=>a.time.localeCompare(b.time);
 
-function rowEl(r){
-  const el=document.createElement('div'); const overdue=isOverdue(r);
-  el.className='row '+r.type+(isDone(r)?' is-done':'')+(overdue?' due':'');
-  let meta = r.type==='recurring' ? recurLabel(r) : (overdue ? '<span class="tagdue">Overdue</span> · '+dateLabel(r.date) : dateLabel(r.date));
-  el.innerHTML=`<button class="check" role="checkbox" aria-checked="${isDone(r)}" aria-label="Mark done"></button>
+function occursToday(r) {
+  return r.type === 'once'
+    ? r.date === todayKey()
+    : r.freq === 'daily' || r.days.includes(new Date().getDay());
+}
+
+function isDone(r) {
+  return r.type === 'once'
+    ? r.done
+    : r.completed.includes(todayKey());
+}
+
+function recurLabel(r) {
+  if (r.freq === 'daily') return 'Every day';
+
+  const names = DOW_DISPLAY
+    .filter(d => r.days.includes(d))
+    .map(d => DOW[d]);
+
+  return names.length === 7 ? 'Every day' : names.join(' · ');
+}
+
+function dateLabel(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+
+  return `${DOW[dt.getDay()]} ${d} ${MON[m - 1]}`;
+}
+
+function isOverdue(r) {
+  if (r.type !== 'once' || r.done) return false;
+
+  return new Date(`${r.date}T${r.time}`) < new Date();
+}
+
+const byTime = (a, b) => a.time.localeCompare(b.time);
+
+function rowEl(r) {
+  const el = document.createElement('div');
+  const overdue = isOverdue(r);
+
+  el.className =
+    'row ' +
+    r.type +
+    (isDone(r) ? ' is-done' : '') +
+    (overdue ? ' due' : '');
+
+  const meta = r.type === 'recurring'
+    ? recurLabel(r)
+    : overdue
+      ? '<span class="tagdue">Overdue</span> · ' + dateLabel(r.date)
+      : dateLabel(r.date);
+
+  el.innerHTML = `
+    <button class="check" role="checkbox" aria-checked="${isDone(r)}" aria-label="Mark done"></button>
     <span class="when">${r.time}</span>
-    <div class="body"><div class="t"></div><div class="meta">${meta}</div></div>
-    <button class="del" aria-label="Delete">×</button>`;
-  el.querySelector('.t').textContent=r.title;
-  el.querySelector('.check').onclick=()=>toggle(r);
-  el.querySelector('.del').onclick=()=>remove(r.id);
+    <div class="body">
+      <div class="t"></div>
+      <div class="meta">${meta}</div>
+    </div>
+    <button class="del" aria-label="Delete">×</button>
+  `;
+
+  el.querySelector('.t').textContent = r.title;
+  el.querySelector('.check').onclick = () => toggle(r);
+  el.querySelector('.del').onclick = () => remove(r.id);
+
   return el;
 }
-function groupEl(title,items){ const g=document.createElement('div'); g.className='group'; const h=document.createElement('div'); h.className='group-head'; h.innerHTML=`<h2>${title}</h2><span class="rule"></span><span class="cnt">${items.length}</span>`; g.appendChild(h); items.forEach(r=>g.appendChild(rowEl(r))); return g; }
-function emptyEl(glyph,msg,sub){ const e=document.createElement('div'); e.className='empty'; e.innerHTML=`<div class="big">${glyph}</div><p>${msg}</p><p class="sub">${sub}</p>`; return e; }
 
-function render(){
-  const todayItems=mem.filter(occursToday);
-  const upcoming=mem.filter(r=>r.type==='once'&&r.date>todayKey()).sort((a,b)=>a.date===b.date?byTime(a,b):a.date.localeCompare(b.date));
-  const routines=mem.filter(r=>r.type==='recurring').sort(byTime);
-  $('#nToday').textContent=todayItems.filter(r=>!isDone(r)).length;
-  $('#nUp').textContent=upcoming.length;
-  $('#nRout').textContent=routines.length;
-  const list=$('#list'); list.innerHTML='';
-  if(view==='today'){
-    const open=todayItems.filter(r=>!isDone(r)).sort(byTime), done=todayItems.filter(isDone).sort(byTime);
-    if(!open.length&&!done.length) list.appendChild(emptyEl('○','Nothing scheduled today.','Tap Add to set a reminder or a routine.'));
-    else{ if(open.length) list.appendChild(groupEl('Due today',open)); if(done.length) list.appendChild(groupEl('Done',done)); }
-  }else if(view==='upcoming'){
-    if(!upcoming.length) list.appendChild(emptyEl('→','No upcoming reminders.','One-off reminders with a future date show up here.'));
-    else{ const g={}; upcoming.forEach(r=>{(g[r.date]=g[r.date]||[]).push(r)}); Object.keys(g).sort().forEach(d=>list.appendChild(groupEl(dateLabel(d),g[d].sort(byTime)))); }
-  }else{
-    if(!routines.length) list.appendChild(emptyEl('↻','No routines yet.','Recurring daily or weekly reminders live here.'));
-    else list.appendChild(groupEl('Recurring',routines));
+function groupEl(title, items) {
+  const g = document.createElement('div');
+  g.className = 'group';
+
+  const h = document.createElement('div');
+  h.className = 'group-head';
+
+  h.innerHTML = `
+    <h2>${title}</h2>
+    <span class="rule"></span>
+    <span class="cnt">${items.length}</span>
+  `;
+
+  g.appendChild(h);
+
+  items.forEach(r => g.appendChild(rowEl(r)));
+
+  return g;
+}
+
+function emptyEl(glyph, msg, sub) {
+  const e = document.createElement('div');
+  e.className = 'empty';
+
+  e.innerHTML = `
+    <div class="big">${glyph}</div>
+    <p>${msg}</p>
+    <p class="sub">${sub}</p>
+  `;
+
+  return e;
+}
+
+function render() {
+  const todayItems = mem.filter(occursToday);
+
+  const upcoming = mem
+    .filter(r => r.type === 'once' && r.date > todayKey())
+    .sort((a, b) =>
+      a.date === b.date ? byTime(a, b) : a.date.localeCompare(b.date)
+    );
+
+  const routines = mem
+    .filter(r => r.type === 'recurring')
+    .sort(byTime);
+
+  $('#nToday').textContent = todayItems.filter(r => !isDone(r)).length;
+  $('#nUp').textContent = upcoming.length;
+  $('#nRout').textContent = routines.length;
+
+  const list = $('#list');
+  list.innerHTML = '';
+
+  if (view === 'today') {
+    const open = todayItems.filter(r => !isDone(r)).sort(byTime);
+    const done = todayItems.filter(isDone).sort(byTime);
+
+    if (!open.length && !done.length) {
+      list.appendChild(emptyEl('○', 'Nothing scheduled today.', 'Tap Add to set a reminder or a routine.'));
+    } else {
+      if (open.length) list.appendChild(groupEl('Due today', open));
+      if (done.length) list.appendChild(groupEl('Done', done));
+    }
+  } else if (view === 'upcoming') {
+    if (!upcoming.length) {
+      list.appendChild(emptyEl('→', 'No upcoming reminders.', 'One-off reminders with a future date show up here.'));
+    } else {
+      const g = {};
+
+      upcoming.forEach(r => {
+        (g[r.date] = g[r.date] || []).push(r);
+      });
+
+      Object.keys(g).sort().forEach(d =>
+        list.appendChild(groupEl(dateLabel(d), g[d].sort(byTime)))
+      );
+    }
+  } else {
+    if (!routines.length) {
+      list.appendChild(emptyEl('↻', 'No routines yet.', 'Recurring daily or weekly reminders live here.'));
+    } else {
+      list.appendChild(groupEl('Recurring', routines));
+    }
   }
 }
 
 /* ---------------- wiring ---------------- */
-$('#addBtn').onclick=()=> $('#composer').classList.contains('open')?closeComposer():openComposer();
-$('#cCancel').onclick=closeComposer;
-$('#cSave').onclick=saveReminder;
-$('#cTitle').addEventListener('input',validate);
-$('#cTitle').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!$('#cSave').disabled) saveReminder(); });
-$('#cFreq').addEventListener('change',freqChanged);
-document.querySelectorAll('.seg button').forEach(b=> b.onclick=()=>setType(b.dataset.k));
-document.querySelectorAll('.tab').forEach(t=> t.onclick=()=>{ view=t.dataset.view; document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected', x===t)); render(); });
+
+$('#addBtn').onclick = () =>
+  $('#composer').classList.contains('open') ? closeComposer() : openComposer();
+
+$('#cCancel').onclick = closeComposer;
+$('#cSave').onclick = saveReminder;
+
+$('#cTitle').addEventListener('input', validate);
+
+$('#cTitle').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !$('#cSave').disabled) saveReminder();
+});
+
+$('#cFreq').addEventListener('change', freqChanged);
+
+document.querySelectorAll('.seg button').forEach(b =>
+  b.onclick = () => setType(b.dataset.k)
+);
+
+document.querySelectorAll('.tab').forEach(t =>
+  t.onclick = () => {
+    view = t.dataset.view;
+
+    document.querySelectorAll('.tab').forEach(x =>
+      x.setAttribute('aria-selected', x === t)
+    );
+
+    render();
+  }
+);
 </script>
+
 </body>
 </html>
