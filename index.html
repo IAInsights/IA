@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chrono — personal reminders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#ECECE8;--card:#FAFAF7;--ink:#15171B;--ink-soft:#61656D;--ink-faint:#9A9DA3;
+    --line:rgba(21,23,27,.12);--line-soft:rgba(21,23,27,.07);
+    --signal:#D6402A;--signal-bg:rgba(214,64,42,.09);
+    --steel:#2C5E72;--steel-bg:rgba(44,94,114,.10);
+    --radius:10px;--display:'Space Grotesk',system-ui,sans-serif;--mono:'Space Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--display);line-height:1.45;-webkit-font-smoothing:antialiased;padding:24px 16px 64px}
+  .wrap{max-width:680px;margin:0 auto}
+  .hidden{display:none!important}
+
+  /* instrument header */
+  .inst{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:18px 20px 0;overflow:hidden}
+  .inst-top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px}
+  .mark{width:22px;height:22px;flex:none}
+  .brand h1{font-size:15px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin:0}
+  .clock{font-family:var(--mono);font-size:13px;letter-spacing:.04em;color:var(--ink-soft);text-align:right}
+  .clock .time{font-size:26px;font-weight:700;color:var(--ink);letter-spacing:.02em;display:block;line-height:1.1}
+  .clock .date{text-transform:uppercase}
+  .progress{margin:16px -20px 0;height:6px;background:var(--line-soft);position:relative}
+  .progress #dayBar{position:absolute;inset:0 auto 0 0;background:var(--ink);width:0%}
+  .progress .lab{position:absolute;right:8px;top:-18px;font-family:var(--mono);font-size:10px;color:var(--ink-faint);letter-spacing:.05em}
+
+  .bar{display:flex;align-items:center;gap:8px;margin:18px 0;flex-wrap:wrap}
+  .tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:4px}
+  .tab{appearance:none;border:0;background:transparent;font-family:var(--display);font-weight:500;font-size:13px;color:var(--ink-soft);padding:7px 13px;border-radius:7px;cursor:pointer}
+  .tab[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+  .tab .n{font-family:var(--mono);font-size:11px;opacity:.7;margin-left:5px}
+  .spacer{flex:1}
+  .add-btn{appearance:none;border:0;background:var(--ink);color:var(--paper);font-family:var(--display);font-weight:600;font-size:14px;padding:10px 18px;border-radius:var(--radius);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .add-btn .plus{font-size:17px;line-height:1}
+
+  .composer{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:18px;margin-bottom:22px;display:none}
+  .composer.open{display:block}
+  .composer .title-in{width:100%;border:0;border-bottom:2px solid var(--line);background:transparent;font-family:var(--display);font-size:19px;font-weight:600;color:var(--ink);padding:4px 0 9px;outline:none}
+  .composer .title-in::placeholder{color:var(--ink-faint)}
+  .composer .title-in:focus{border-bottom-color:var(--ink)}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:16px 0 14px}
+  .seg button{appearance:none;border:0;background:transparent;font-family:var(--display);font-weight:600;font-size:13px;color:var(--ink-soft);padding:8px 16px;cursor:pointer}
+  .seg button[aria-pressed="true"][data-k="once"]{background:var(--signal-bg);color:var(--signal)}
+  .seg button[aria-pressed="true"][data-k="recurring"]{background:var(--steel-bg);color:var(--steel)}
+  .fields{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint)}
+  .field input,.field select{font-family:var(--mono);font-size:14px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px 11px;outline:none}
+  .field input:focus,.field select:focus{border-color:var(--ink)}
+  .days{display:flex;gap:5px}
+  .days button{appearance:none;border:1px solid var(--line);background:var(--paper);font-family:var(--mono);font-size:11px;width:34px;height:34px;border-radius:7px;cursor:pointer;color:var(--ink-soft);padding:0}
+  .days button[aria-pressed="true"]{background:var(--steel);color:#fff;border-color:var(--steel)}
+  .composer-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .ghost{appearance:none;border:1px solid var(--line);background:transparent;font-family:var(--display);font-weight:500;font-size:14px;color:var(--ink-soft);padding:9px 16px;border-radius:var(--radius);cursor:pointer}
+  .save{appearance:none;border:0;background:var(--ink);color:var(--paper);font-family:var(--display);font-weight:600;font-size:14px;padding:10px 20px;border-radius:var(--radius);cursor:pointer}
+  .save:disabled{opacity:.4;cursor:not-allowed}
+
+  .group{margin-bottom:26px}
+  .group-head{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+  .group-head h2{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin:0}
+  .group-head .rule{flex:1;height:1px;background:var(--line)}
+  .group-head .cnt{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+  .row{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--line);border-left-width:3px;border-radius:var(--radius);padding:13px 15px;margin-bottom:8px}
+  .row.once{border-left-color:var(--signal)}
+  .row.recurring{border-left-color:var(--steel)}
+  .row.due{border-left-color:var(--signal);background:var(--signal-bg)}
+  .row.is-done{opacity:.5}
+  .check{appearance:none;flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);background:transparent;cursor:pointer;position:relative;padding:0}
+  .row.once .check{border-color:var(--signal)}
+  .row.recurring .check{border-color:var(--steel)}
+  .check[aria-checked="true"]{background:var(--ink);border-color:var(--ink)}
+  .check[aria-checked="true"]::after{content:"";position:absolute;left:6px;top:2.5px;width:5px;height:9px;border:solid var(--paper);border-width:0 2px 2px 0;transform:rotate(45deg)}
+  .when{font-family:var(--mono);font-size:15px;font-weight:700;flex:none;min-width:52px}
+  .row.once .when{color:var(--signal)}
+  .row.recurring .when{color:var(--steel)}
+  .body{flex:1;min-width:0}
+  .body .t{font-weight:500;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.is-done .body .t{text-decoration:line-through}
+  .body .meta{font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.03em;margin-top:1px}
+  .tagdue{color:var(--signal);font-weight:700}
+  .del{appearance:none;border:0;background:transparent;color:var(--ink-faint);cursor:pointer;font-size:18px;line-height:1;padding:4px;border-radius:6px;flex:none}
+  .del:hover{color:var(--signal)}
+
+  .empty{border:1px dashed var(--line);border-radius:var(--radius);padding:40px 24px;text-align:center;color:var(--ink-soft)}
+  .empty .big{font-family:var(--mono);font-size:30px;color:var(--ink-faint);margin-bottom:10px}
+  .empty p{margin:0 0 4px;font-size:15px}
+  .empty .sub{font-size:13px;color:var(--ink-faint)}
+
+  .foot{font-family:var(--mono);font-size:11px;color:var(--ink-faint);text-align:center;margin-top:30px;letter-spacing:.03em}
+  .foot button{appearance:none;border:0;background:transparent;color:var(--ink-faint);font-family:var(--mono);font-size:11px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  .foot button:hover{color:var(--signal)}
+  .banner{background:var(--signal-bg);color:var(--signal);border:1px solid var(--signal);border-radius:8px;padding:9px 13px;font-family:var(--mono);font-size:12px;margin-bottom:16px;display:none}
+  .banner.show{display:block}
+
+  /* auth + setup gate */
+  .gate{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50}
+  .gate-card{max-width:360px;width:100%;text-align:center}
+  .gate-card .mark{width:34px;height:34px;margin:0 auto 14px}
+  .gate-card h2{font-size:15px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin:0 0 18px}
+  .gate-card p{color:var(--ink-soft);font-size:14px;margin:0 0 20px}
+  .gate-card input{width:100%;font-family:var(--mono);font-size:15px;text-align:center;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px;outline:none;margin-bottom:12px}
+  .gate-card input:focus{border-color:var(--ink)}
+  .gate-card .save{width:100%;padding:13px}
+  .gate-status{font-family:var(--mono);font-size:12px;min-height:18px;margin-top:14px!important}
+  .gate-status.ok{color:var(--steel)}
+  .gate-status.err{color:var(--signal)}
+  .setup-code{font-family:var(--mono);font-size:11px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;color:var(--ink-soft);margin-bottom:16px;line-height:1.7;word-break:break-all}
+
+  :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  @media (max-width:480px){.clock .time{font-size:21px}.when{min-width:46px;font-size:14px}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  #dayBar{transition:width .9s linear}
+</style>
+</head>
+<body>
+
+<!-- ===== auth / setup gate ===== -->
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10.5" stroke="var(--ink)" stroke-width="1.5"/>
+      <path d="M12 5.5V12L16 14.5" stroke="var(--signal)" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="12" cy="12" r="1.4" fill="var(--ink)"/>
+    </svg>
+    <h2>Chrono</h2>
+    <div id="gateLogin">
+      <p>Sign in to sync your reminders.</p>
+      <input type="email" id="email" placeholder="you@email.com" autocomplete="email">
+      <button class="save" id="sendLink">Send magic link</button>
+      <p class="gate-status" id="gateStatus"></p>
+    </div>
+    <div id="gateSetup" class="hidden">
+      <p>Add your Supabase keys to the top of this file, then reload.</p>
+      <div class="setup-code">const SUPABASE_URL = '…'<br>const SUPABASE_ANON_KEY = '…'</div>
+      <p class="gate-status">Settings → API in your project dashboard.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== app ===== -->
+<div class="wrap hidden" id="app">
+  <header class="inst">
+    <div class="inst-top">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="10.5" stroke="var(--ink)" stroke-width="1.5"/>
+          <path d="M12 5.5V12L16 14.5" stroke="var(--signal)" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="12" cy="12" r="1.4" fill="var(--ink)"/>
+        </svg>
+        <h1>Chrono</h1>
+      </div>
+      <div class="clock">
+        <span class="time" id="clockTime">--:--:--</span>
+        <span class="date" id="clockDate">—</span>
+      </div>
+    </div>
+    <div class="progress"><span class="lab" id="dayLab"></span><span id="dayBar"></span></div>
+  </header>
+
+  <div class="bar">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-view="today">Today<span class="n" id="nToday">0</span></button>
+      <button class="tab" role="tab" aria-selected="false" data-view="upcoming">Upcoming<span class="n" id="nUp">0</span></button>
+      <button class="tab" role="tab" aria-selected="false" data-view="routines">Routines<span class="n" id="nRout">0</span></button>
+    </div>
+    <span class="spacer"></span>
+    <button class="add-btn" id="addBtn"><span class="plus">+</span> Add</button>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="composer" id="composer">
+    <input class="title-in" id="cTitle" placeholder="What do you want to remember?" autocomplete="off">
+    <div class="seg" role="group" aria-label="Type">
+      <button data-k="once" aria-pressed="true">One-off</button>
+      <button data-k="recurring" aria-pressed="false">Recurring</button>
+    </div>
+    <div class="fields" id="fieldsOnce">
+      <div class="field"><label for="cDate">Date</label><input type="date" id="cDate"></div>
+      <div class="field"><label for="cTime">Time</label><input type="time" id="cTime"></div>
+    </div>
+    <div class="fields" id="fieldsRec" style="display:none">
+      <div class="field"><label for="cFreq">Repeats</label>
+        <select id="cFreq"><option value="daily">Every day</option><option value="weekly">Weekly</option></select></div>
+      <div class="field" id="daysWrap"><label>On</label><div class="days" id="daysPick"></div></div>
+      <div class="field"><label for="cRTime">Time</label><input type="time" id="cRTime"></div>
+    </div>
+    <div class="composer-foot">
+      <button class="ghost" id="cCancel">Cancel</button>
+      <button class="save" id="cSave" disabled>Add reminder</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+  <div class="foot">Synced to Supabase · <button id="signOut">sign out</button></div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — paste your personal project values here
+   (Settings → API). The anon key is safe in frontend code
+   because Row Level Security protects every row.
+   ============================================================ */
+const SUPABASE_URL      = 'https://joemcfjesnivevkaofzi.supabase.co';      // e.g. https://abcd1234.supabase.co
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZW1jZmplc25pdmV2a2FvZnppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMTY2ODksImV4cCI6MjA5Nzc5MjY4OX0.C5P6ZXYHyA9e9skQth9s5KudfzDNL5OXgw9MQLYVtDo';
+
+/* ---------------- boot guards ---------------- */
+const CONFIGURED = !SUPABASE_URL.startsWith('YOUR-') && !SUPABASE_ANON_KEY.startsWith('YOUR-');
+const $=s=>document.querySelector(s);
+let sb=null, mem=[], view='today', cType='once', recDays=new Set();
+
+if(!CONFIGURED){
+  $('#gateLogin').classList.add('hidden');
+  $('#gateSetup').classList.remove('hidden');
+}else{
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  initAuth();
+}
+
+/* ---------------- auth ---------------- */
+function initAuth(){
+  sb.auth.getSession().then(({data})=>{ if(data.session) enterApp(); });
+  sb.auth.onAuthStateChange((event,session)=>{
+    if(session) enterApp();
+    else showGate();
+  });
+}
+function showGate(){ $('#gate').classList.remove('hidden'); $('#app').classList.add('hidden'); }
+async function enterApp(){
+  if(!$('#gate').classList.contains('hidden')){ $('#gate').classList.add('hidden'); }
+  $('#app').classList.remove('hidden');
+  buildDayPicker(); tick();
+  await loadData();
+}
+$('#sendLink').onclick=async()=>{
+  const email=$('#email').value.trim();
+  const status=$('#gateStatus'); status.className='gate-status';
+  if(!email){ status.textContent='Enter your email.'; status.classList.add('err'); return; }
+  $('#sendLink').disabled=true; status.textContent='Sending…';
+  const {error}=await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.href.split('#')[0] } });
+  $('#sendLink').disabled=false;
+  if(error){ status.textContent=error.message; status.classList.add('err'); }
+  else{ status.textContent='Check your inbox for the sign-in link.'; status.classList.add('ok'); }
+};
+$('#email').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#sendLink').click(); });
+$('#signOut').onclick=async()=>{ await sb.auth.signOut(); mem=[]; };
+
+/* ---------------- helpers ---------------- */
+const banner=$('#banner');
+const pad=n=>String(n).padStart(2,'0');
+const todayKey=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DOW_DISPLAY=[1,2,3,4,5,6,0];
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function showErr(msg){ banner.textContent=msg; banner.classList.add('show'); setTimeout(()=>banner.classList.remove('show'),4000); }
+const hhmm=t=>(t||'09:00:00').slice(0,5);
+
+/* ---------------- data layer (Supabase) ---------------- */
+function toMem(r, compBy){
+  return r.type==='once'
+    ? {id:r.id,title:r.title,type:'once',date:r.due_date,time:hhmm(r.at_time),done:r.done}
+    : {id:r.id,title:r.title,type:'recurring',freq:r.freq,days:r.days||[],time:hhmm(r.at_time),completed:compBy?.[r.id]||[]};
+}
+async function loadData(){
+  const [rem,comp]=await Promise.all([
+    sb.from('reminders').select('*').eq('archived',false),
+    sb.from('completions').select('reminder_id,completed_on')
+  ]);
+  if(rem.error||comp.error){ showErr((rem.error||comp.error).message); return; }
+  const compBy={};
+  (comp.data||[]).forEach(c=>{ (compBy[c.reminder_id]=compBy[c.reminder_id]||[]).push(c.completed_on); });
+  mem=(rem.data||[]).map(r=>toMem(r,compBy));
+  render();
+}
+async function saveReminder(){
+  const title=$('#cTitle').value.trim(); if(!title) return;
+  const payload = cType==='once'
+    ? {title,type:'once',due_date:$('#cDate').value,at_time:$('#cTime').value||'09:00',done:false}
+    : {title,type:'recurring',freq:$('#cFreq').value,days:$('#cFreq').value==='weekly'?[...recDays]:[0,1,2,3,4,5,6],at_time:$('#cRTime').value||'09:00'};
+  const {data,error}=await sb.from('reminders').insert(payload).select().single();
+  if(error){ showErr(error.message); return; }
+  mem.push(toMem(data,{})); closeComposer(); render();
+}
+async function toggle(r){
+  if(r.type==='once'){
+    const nv=!r.done; r.done=nv; render();
+    const {error}=await sb.from('reminders').update({done:nv}).eq('id',r.id);
+    if(error){ r.done=!nv; render(); showErr(error.message); }
+  }else{
+    const k=todayKey(), i=r.completed.indexOf(k);
+    if(i>=0){ r.completed.splice(i,1); render();
+      const {error}=await sb.from('completions').delete().eq('reminder_id',r.id).eq('completed_on',k);
+      if(error){ r.completed.push(k); render(); showErr(error.message); }
+    }else{ r.completed.push(k); render();
+      const {error}=await sb.from('completions').insert({reminder_id:r.id,completed_on:k});
+      if(error){ r.completed.splice(r.completed.indexOf(k),1); render(); showErr(error.message); }
+    }
+  }
+}
+async function remove(id){
+  const r=mem.find(x=>x.id===id); if(!r) return;
+  mem=mem.filter(x=>x.id!==id); render();
+  const op = r.type==='recurring'
+    ? sb.from('reminders').update({archived:true}).eq('id',id)   // keep history
+    : sb.from('reminders').delete().eq('id',id);
+  const {error}=await op;
+  if(error){ mem.push(r); render(); showErr(error.message); }
+}
+
+/* ---------------- clock ---------------- */
+function tick(){
+  const n=new Date();
+  $('#clockTime').textContent=`${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
+  $('#clockDate').textContent=`${DOW[n.getDay()].toUpperCase()} ${n.getDate()} ${MON[n.getMonth()].toUpperCase()}`;
+  const frac=(n-new Date(n.getFullYear(),n.getMonth(),n.getDate()))/86400000;
+  $('#dayBar').style.width=(frac*100).toFixed(2)+'%';
+  $('#dayLab').textContent=Math.round(frac*100)+'% of day';
+}
+setInterval(tick,1000);
+
+/* ---------------- composer ---------------- */
+function buildDayPicker(){
+  const w=$('#daysPick'); w.innerHTML='';
+  DOW_DISPLAY.forEach(d=>{
+    const b=document.createElement('button');
+    b.textContent=DOW[d][0]; b.setAttribute('aria-pressed','false'); b.title=DOW[d];
+    b.onclick=()=>{ b.getAttribute('aria-pressed')==='true' ? (recDays.delete(d),b.setAttribute('aria-pressed','false')) : (recDays.add(d),b.setAttribute('aria-pressed','true')); validate(); };
+    w.appendChild(b);
+  });
+}
+function openComposer(){ $('#composer').classList.add('open'); $('#cDate').value=todayKey(); $('#cTime').value='09:00'; $('#cRTime').value='09:00'; $('#cTitle').focus(); }
+function closeComposer(){ $('#composer').classList.remove('open'); $('#cTitle').value=''; recDays.clear(); buildDayPicker(); setType('once'); validate(); }
+function setType(t){ cType=t; document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.k===t)); $('#fieldsOnce').style.display=t==='once'?'flex':'none'; $('#fieldsRec').style.display=t==='recurring'?'flex':'none'; validate(); }
+function freqChanged(){ $('#daysWrap').style.display=$('#cFreq').value==='weekly'?'flex':'none'; validate(); }
+function validate(){ const ok=$('#cTitle').value.trim().length>0 && !(cType==='recurring'&&$('#cFreq').value==='weekly'&&recDays.size===0); $('#cSave').disabled=!ok; }
+
+/* ---------------- occurrence + render ---------------- */
+function occursToday(r){ return r.type==='once' ? r.date===todayKey() : (r.freq==='daily'||r.days.includes(new Date().getDay())); }
+function isDone(r){ return r.type==='once' ? r.done : r.completed.includes(todayKey()); }
+function recurLabel(r){ if(r.freq==='daily') return 'Every day'; const names=DOW_DISPLAY.filter(d=>r.days.includes(d)).map(d=>DOW[d]); return names.length===7?'Every day':names.join(' · '); }
+function dateLabel(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); return `${DOW[dt.getDay()]} ${d} ${MON[m-1]}`; }
+function isOverdue(r){ if(r.type!=='once'||r.done) return false; return new Date(`${r.date}T${r.time}`)<new Date(); }
+const byTime=(a,b)=>a.time.localeCompare(b.time);
+
+function rowEl(r){
+  const el=document.createElement('div'); const overdue=isOverdue(r);
+  el.className='row '+r.type+(isDone(r)?' is-done':'')+(overdue?' due':'');
+  let meta = r.type==='recurring' ? recurLabel(r) : (overdue ? '<span class="tagdue">Overdue</span> · '+dateLabel(r.date) : dateLabel(r.date));
+  el.innerHTML=`<button class="check" role="checkbox" aria-checked="${isDone(r)}" aria-label="Mark done"></button>
+    <span class="when">${r.time}</span>
+    <div class="body"><div class="t"></div><div class="meta">${meta}</div></div>
+    <button class="del" aria-label="Delete">×</button>`;
+  el.querySelector('.t').textContent=r.title;
+  el.querySelector('.check').onclick=()=>toggle(r);
+  el.querySelector('.del').onclick=()=>remove(r.id);
+  return el;
+}
+function groupEl(title,items){ const g=document.createElement('div'); g.className='group'; const h=document.createElement('div'); h.className='group-head'; h.innerHTML=`<h2>${title}</h2><span class="rule"></span><span class="cnt">${items.length}</span>`; g.appendChild(h); items.forEach(r=>g.appendChild(rowEl(r))); return g; }
+function emptyEl(glyph,msg,sub){ const e=document.createElement('div'); e.className='empty'; e.innerHTML=`<div class="big">${glyph}</div><p>${msg}</p><p class="sub">${sub}</p>`; return e; }
+
+function render(){
+  const todayItems=mem.filter(occursToday);
+  const upcoming=mem.filter(r=>r.type==='once'&&r.date>todayKey()).sort((a,b)=>a.date===b.date?byTime(a,b):a.date.localeCompare(b.date));
+  const routines=mem.filter(r=>r.type==='recurring').sort(byTime);
+  $('#nToday').textContent=todayItems.filter(r=>!isDone(r)).length;
+  $('#nUp').textContent=upcoming.length;
+  $('#nRout').textContent=routines.length;
+  const list=$('#list'); list.innerHTML='';
+  if(view==='today'){
+    const open=todayItems.filter(r=>!isDone(r)).sort(byTime), done=todayItems.filter(isDone).sort(byTime);
+    if(!open.length&&!done.length) list.appendChild(emptyEl('○','Nothing scheduled today.','Tap Add to set a reminder or a routine.'));
+    else{ if(open.length) list.appendChild(groupEl('Due today',open)); if(done.length) list.appendChild(groupEl('Done',done)); }
+  }else if(view==='upcoming'){
+    if(!upcoming.length) list.appendChild(emptyEl('→','No upcoming reminders.','One-off reminders with a future date show up here.'));
+    else{ const g={}; upcoming.forEach(r=>{(g[r.date]=g[r.date]||[]).push(r)}); Object.keys(g).sort().forEach(d=>list.appendChild(groupEl(dateLabel(d),g[d].sort(byTime)))); }
+  }else{
+    if(!routines.length) list.appendChild(emptyEl('↻','No routines yet.','Recurring daily or weekly reminders live here.'));
+    else list.appendChild(groupEl('Recurring',routines));
+  }
+}
+
+/* ---------------- wiring ---------------- */
+$('#addBtn').onclick=()=> $('#composer').classList.contains('open')?closeComposer():openComposer();
+$('#cCancel').onclick=closeComposer;
+$('#cSave').onclick=saveReminder;
+$('#cTitle').addEventListener('input',validate);
+$('#cTitle').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!$('#cSave').disabled) saveReminder(); });
+$('#cFreq').addEventListener('change',freqChanged);
+document.querySelectorAll('.seg button').forEach(b=> b.onclick=()=>setType(b.dataset.k));
+document.querySelectorAll('.tab').forEach(t=> t.onclick=()=>{ view=t.dataset.view; document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected', x===t)); render(); });
+</script>
+</body>
+</html>
